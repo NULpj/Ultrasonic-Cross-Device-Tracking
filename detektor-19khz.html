@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Detektor Lonjakan Frekuensi 19kHz</title>
+<style>
+  :root{
+    --bg1:#0a0e14;
+    --bg2:#0f1620;
+    --green:#22c55e;
+    --red:#ef4444;
+    --text-dim:#7a8699;
+    --card:#131b26;
+    --border:#1f2937;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:radial-gradient(circle at 50% 0%, var(--bg2), var(--bg1));
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color:#e5e7eb;
+    overscroll-behavior:none;
+    user-select:none;
+  }
+  .wrap{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:space-between;
+    padding:24px 20px 32px;
+  }
+  header{
+    text-align:center;
+    width:100%;
+    padding-top:8px;
+  }
+  header h1{
+    font-size:17px;
+    font-weight:600;
+    margin:0 0 4px;
+    letter-spacing:0.3px;
+    color:#f1f5f9;
+  }
+  header p{
+    margin:0;
+    font-size:12.5px;
+    color:var(--text-dim);
+  }
+
+  .center-stage{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    gap:18px;
+  }
+
+  .status-ring{
+    position:relative;
+    width:min(64vw, 260px);
+    height:min(64vw, 260px);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--card);
+    border:2px solid var(--border);
+    transition:border-color .25s ease, box-shadow .25s ease;
+    box-shadow:0 0 0 rgba(34,197,94,0);
+  }
+  .status-ring.idle{
+    border-color:var(--border);
+  }
+  .status-ring.monitoring{
+    border-color:var(--green);
+    box-shadow:0 0 30px rgba(34,197,94,0.25);
+  }
+  .status-ring.alert{
+    border-color:var(--red);
+    box-shadow:0 0 40px rgba(239,68,68,0.45);
+    animation:pulseRing 0.6s infinite alternate;
+  }
+  @keyframes pulseRing{
+    from{ box-shadow:0 0 20px rgba(239,68,68,0.35); transform:scale(1); }
+    to{ box-shadow:0 0 55px rgba(239,68,68,0.75); transform:scale(1.03); }
+  }
+
+  .status-text{
+    font-size:clamp(15px, 4.4vw, 20px);
+    font-weight:700;
+    text-align:center;
+    padding:0 14px;
+    line-height:1.35;
+    transition:color .2s ease;
+  }
+  .status-text.idle{ color:var(--text-dim); }
+  .status-text.monitoring{ color:var(--green); }
+  .status-text.alert{
+    color:var(--red);
+    animation:blinkText 0.6s infinite;
+  }
+  @keyframes blinkText{
+    0%,100%{ opacity:1; }
+    50%{ opacity:0.35; }
+  }
+
+  .db-readout{
+    font-size:13.5px;
+    color:var(--text-dim);
+    text-align:center;
+    font-variant-numeric:tabular-nums;
+  }
+  .db-readout b{
+    color:#cbd5e1;
+    font-size:15px;
+  }
+  .db-readout.alert b{
+    color:var(--red);
+  }
+
+  .meta-row{
+    display:flex;
+    gap:16px;
+    font-size:11px;
+    color:#4b5563;
+    margin-top:4px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .meta-row span{
+    background:var(--card);
+    border:1px solid var(--border);
+    padding:4px 9px;
+    border-radius:20px;
+  }
+
+  .action-area{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+  }
+
+  #micBtn{
+    width:100%;
+    max-width:340px;
+    padding:16px 20px;
+    font-size:16px;
+    font-weight:700;
+    border:none;
+    border-radius:16px;
+    background:linear-gradient(135deg,#22c55e,#16a34a);
+    color:#04140a;
+    cursor:pointer;
+    box-shadow:0 6px 18px rgba(34,197,94,0.3);
+    transition:transform .12s ease, opacity .2s ease;
+  }
+  #micBtn:active{ transform:scale(0.97); }
+  #micBtn.stop{
+    background:linear-gradient(135deg,#334155,#1e293b);
+    color:#e2e8f0;
+    box-shadow:none;
+  }
+  #micBtn:disabled{
+    opacity:0.55;
+    cursor:not-allowed;
+  }
+
+  .error-box{
+    max-width:340px;
+    width:100%;
+    background:#2a1414;
+    border:1px solid #7f1d1d;
+    color:#fca5a5;
+    font-size:12.5px;
+    padding:10px 12px;
+    border-radius:10px;
+    text-align:center;
+    display:none;
+  }
+  .error-box.show{ display:block; }
+
+  footer{
+    margin-top:14px;
+    font-size:10.5px;
+    color:#374151;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🔊 Detektor Lonjakan 19 kHz</h1>
+    <p>Pemantauan frekuensi ultrasonik secara real-time</p>
+  </header>
+
+  <div class="center-stage">
+    <div class="status-ring idle" id="statusRing">
+      <div class="status-text idle" id="statusText">Menunggu Izin<br>Mikrofon</div>
+    </div>
+
+    <div class="db-readout" id="dbReadout">
+      Target: <b id="targetFreq">-- Hz</b> &nbsp;|&nbsp; Level: <b id="dbValue">-- dB</b>
+    </div>
+
+    <div class="meta-row">
+      <span id="sampleRateInfo">Sample Rate: --</span>
+      <span id="binInfo">Bin: --</span>
+      <span>Threshold: -40 dB</span>
+    </div>
+  </div>
+
+  <div class="action-area">
+    <div class="error-box" id="errorBox"></div>
+    <button id="micBtn">🎙️ Mulai Pantau Mikrofon</button>
+  </div>
+
+  <footer>fftSize 8192 · echoCancellation/noiseSuppression/AGC dinonaktifkan</footer>
+</div>
+
+<script>
+(function(){
+  const TARGET_HZ = 19000;
+  const THRESHOLD_DB = -40;
+  const FFT_SIZE = 8192;
+
+  const micBtn = document.getElementById('micBtn');
+  const statusRing = document.getElementById('statusRing');
+  const statusText = document.getElementById('statusText');
+  const dbReadout = document.getElementById('dbReadout');
+  const dbValue = document.getElementById('dbValue');
+  const targetFreqEl = document.getElementById('targetFreq');
+  const sampleRateInfo = document.getElementById('sampleRateInfo');
+  const binInfo = document.getElementById('binInfo');
+  const errorBox = document.getElementById('errorBox');
+
+  let audioContext = null;
+  let analyser = null;
+  let sourceNode = null;
+  let mediaStream = null;
+  let rafId = null;
+  let targetBinIndex = null;
+  let running = false;
+
+  function setState(state){
+    // state: 'idle' | 'monitoring' | 'alert'
+    statusRing.className = 'status-ring ' + state;
+    statusText.className = 'status-text ' + state;
+    dbReadout.className = 'db-readout ' + (state === 'alert' ? 'alert' : '');
+
+    if(state === 'idle'){
+      statusText.innerHTML = 'Menunggu Izin<br>Mikrofon';
+    } else if(state === 'monitoring'){
+      statusText.textContent = 'Memantau...';
+    } else if(state === 'alert'){
+      statusText.innerHTML = '🚨 LONJAKAN<br>TERDETEKSI! 🚨';
+    }
+  }
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+  function hideError(){
+    errorBox.classList.remove('show');
+    errorBox.textContent = '';
+  }
+
+  async function startMonitoring(){
+    hideError();
+    micBtn.disabled = true;
+    micBtn.textContent = 'Meminta izin mikrofon...';
+
+    try{
+      const constraints = {
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1
+        }
+      };
+
+      mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      audioContext = new AudioCtx();
+
+      // Beberapa browser mobile membutuhkan resume eksplisit setelah gesture user
+      if(audioContext.state === 'suspended'){
+        await audioContext.resume();
+      }
+
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = FFT_SIZE;
+      analyser.smoothingTimeConstant = 0;
+      analyser.minDecibels = -100;
+      analyser.maxDecibels = 0;
+
+      sourceNode = audioContext.createMediaStreamSource(mediaStream);
+      sourceNode.connect(analyser);
+      // Catatan: sengaja TIDAK connect ke destination agar tidak feedback speaker.
+
+      // Hitung bin target secara dinamis berdasarkan sampleRate perangkat
+      const sampleRate = audioContext.sampleRate;
+      const binWidth = sampleRate / analyser.fftSize;
+      targetBinIndex = Math.round(TARGET_HZ / binWidth);
+
+      const nyquist = sampleRate / 2;
+      if(TARGET_HZ >= nyquist){
+        showError('Sample rate perangkat (' + sampleRate + ' Hz) terlalu rendah untuk mendeteksi 19 kHz (Nyquist limit: ' + Math.round(nyquist) + ' Hz).');
+        stopMonitoring();
+        micBtn.disabled = false;
+        micBtn.textContent = '🎙️ Mulai Pantau Mikrofon';
+        return;
+      }
+
+      sampleRateInfo.textContent = 'Sample Rate: ' + sampleRate + ' Hz';
+      binInfo.textContent = 'Bin: #' + targetBinIndex + ' (' + binWidth.toFixed(2) + ' Hz/bin)';
+      targetFreqEl.textContent = Math.round(targetBinIndex * binWidth) + ' Hz';
+
+      running = true;
+      setState('monitoring');
+      micBtn.textContent = '⏹️ Hentikan Pemantauan';
+      micBtn.classList.add('stop');
+      micBtn.disabled = false;
+
+      analyzeLoop();
+
+    } catch(err){
+      console.error(err);
+      let msg = 'Gagal mengakses mikrofon.';
+      if(err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'){
+        msg = 'Izin mikrofon ditolak. Aktifkan izin mikrofon di pengaturan browser untuk melanjutkan.';
+      } else if(err.name === 'NotFoundError'){
+        msg = 'Mikrofon tidak ditemukan pada perangkat ini.';
+      } else if(err.name === 'NotReadableError'){
+        msg = 'Mikrofon sedang digunakan aplikasi lain.';
+      }
+      showError(msg);
+      micBtn.disabled = false;
+      micBtn.textContent = '🎙️ Mulai Pantau Mikrofon';
+      setState('idle');
+    }
+  }
+
+  function analyzeLoop(){
+    if(!running) return;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Float32Array(bufferLength);
+    analyser.getFloatFrequencyData(dataArray);
+
+    let level = dataArray[targetBinIndex];
+    if(!isFinite(level)){
+      level = -100;
+    }
+
+    dbValue.textContent = level.toFixed(1) + ' dB';
+
+    if(level >= THRESHOLD_DB){
+      if(statusRing.className.indexOf('alert') === -1){
+        setState('alert');
+      }
+    } else {
+      if(statusRing.className.indexOf('monitoring') === -1){
+        setState('monitoring');
+      }
+    }
+
+    rafId = requestAnimationFrame(analyzeLoop);
+  }
+
+  function stopMonitoring(){
+    running = false;
+    if(rafId){
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    if(sourceNode){
+      try{ sourceNode.disconnect(); }catch(e){}
+      sourceNode = null;
+    }
+    if(mediaStream){
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+    if(audioContext){
+      try{ audioContext.close(); }catch(e){}
+      audioContext = null;
+    }
+    analyser = null;
+    dbValue.textContent = '-- dB';
+    sampleRateInfo.textContent = 'Sample Rate: --';
+    binInfo.textContent = 'Bin: --';
+    targetFreqEl.textContent = '-- Hz';
+    setState('idle');
+    micBtn.textContent = '🎙️ Mulai Pantau Mikrofon';
+    micBtn.classList.remove('stop');
+  }
+
+  micBtn.addEventListener('click', function(){
+    if(!running){
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
+  });
+
+  // Cek dukungan API di awal
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showError('Browser ini tidak mendukung getUserMedia / Web Audio API.');
+    micBtn.disabled = true;
+  }
+
+  // Jeda otomatis saat tab disembunyikan (hemat baterai), lanjut saat aktif lagi
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden && audioContext && audioContext.state === 'running'){
+      audioContext.suspend();
+    } else if(!document.hidden && audioContext && audioContext.state === 'suspended' && running){
+      audioContext.resume();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
